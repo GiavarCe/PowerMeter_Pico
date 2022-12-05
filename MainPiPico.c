@@ -14,6 +14,7 @@
 
 const uint LED_PIN = PICO_DEFAULT_LED_PIN;
 const uint GP16_PIN = 16; //pin 21
+const uint GP28_PIN = 28; //pin 34
 
 struct funct_out {
 	bool	Done;
@@ -32,6 +33,7 @@ struct structSystemTimer {
 	bool g_os_100ms;
 	bool g_os_1s;
 	bool g_os_1m;
+	absolute_time_t g_now;
 } g_systemTimers;
 
 void SYSTEM_Clock() {
@@ -45,6 +47,8 @@ static 	absolute_time_t endTime, now;
 	}
 
 	now = get_absolute_time(); //Actual time
+	g_systemTimers.g_now = now;
+
 	if (absolute_time_diff_us(endTime, now) > 0) { //Check for timeout
 		g_systemTimers.g_50ms_tick = !g_systemTimers.g_50ms_tick;
 		endTime = make_timeout_time_ms(50); //50ms timeout
@@ -95,6 +99,7 @@ struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
     static absolute_time_t endTime;
 	static struct funct_out outStruct;
 	bool execute_os;
+	int recvMsgLength;
 
 	char recvData[UART_BUFFER_DIM], ch, *firstDataPtr;
 	int i, msgLength;
@@ -125,6 +130,7 @@ struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
 			sendMsg[msgLength-1] = calc_CRC(&sendMsg[3], msgLength - 4); //Checksum
 			for (i=0; i < sizeof(sendMsg); i++)
 				uart_putc_raw(UART_ID, sendMsg[i]); //TBD: escape chars
+			bzero(recvData, sizeof(recvData) ); //Reset received area
 			endTime = make_timeout_time_ms(2000); //2s timeout
 			dataIdx=0;
 			status = RECEIVING;
@@ -145,14 +151,24 @@ struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
 			break;
 
 		case CHECK_DATA: //TBD check data integrity
+			if (dataIdx == 0) {
+				outStruct.ErrorID = NO_CHAR_RECEIVED;
+				printf("[DEBUG] No char received.\n");
+				status = ERROR;
+				break;
+			}
 
 			if (recvData[0] != 0x7E) { //Start delimiter
+				printf("[DEBUG] Bad start delimiter.\n");
 				outStruct.ErrorID = BAD_START_DELIMITER;
 				status = ERROR;
 				break;
 			}
-			
+
+			recvMsgLength = recvData[1] | recvData[2]; //Check byte order and message length
+
 			if (recvData[3] != 0x89) { //Frame type
+				printf("[DEBUG] Bad frame type.\n");
 				outStruct.ErrorID = BAD_FRAME_TYPE;
 				status = ERROR;
 				break;
@@ -181,85 +197,6 @@ struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
 			break;
 	}
 
-	return outStruct;
-}
-
-struct funct_out enterProgramMode(bool inExecute) {
-	static bool execute_pr;
-	static int status=IDLE;
-    static absolute_time_t endTime;
-	static struct funct_out outStruct;
-
-	bool execute_os;
-	char recvData[UART_BUFFER_DIM], ch;
-	int dataIdx;
-    absolute_time_t now;
-	
-	execute_os = inExecute & !execute_pr;
-	execute_pr = inExecute;
-	
-	outStruct.Status = status;
-	
-	switch(status) {
-		case(IDLE):
-			if (execute_os) {
-			    while(uart_is_readable(UART_ID)) //Flush input buffer
-					ch = uart_getc(UART_ID);
-					
-				uart_puts(UART_ID, "+++");
-				endTime = make_timeout_time_ms(5000); //5s timeout
-				status = RECEIVING;
-			}
-			break;
-			
-		case (RECEIVING): 
-            now = get_absolute_time(); //Actual time
-            if (absolute_time_diff_us(endTime, now) > 0) { //Check for timeout
-					dataIdx=0;
-					recvData[0] = '\0';
-                    while(uart_is_readable(UART_ID)) { //Chek for data
-                        recvData[dataIdx] = uart_getc(UART_ID);
-
-
-                        if (++dataIdx < (UART_BUFFER_DIM-1))
-							recvData[dataIdx] = '\0'; //TBD: overflow handling
-                    }
-                    
-					if (strstr(recvData, "OK\r")) { //Check for result
-						outStruct.Done = true;
-						status = DONE;
-					}
-					else {
-						outStruct.Error = true;
-						outStruct.ErrorID = -1;
-						status = ERROR;
-					}
-
-			}
-			break;
-		
-		case(DONE): 
-			if (!inExecute) {
-				outStruct.Done = false;
-				outStruct.Error = false;
-				outStruct.Status = 0;
-				outStruct.ErrorID= 0;
-				status=IDLE;
-			}
-			break;
-		
-		case(ERROR):
-			if (!inExecute) {
-				outStruct.Done = false;
-				outStruct.Error = false;
-				outStruct.Status = 0;
-				outStruct.ErrorID= 0;
-				status=IDLE;
-			}
-
-			break;
-	}
-	
 	return outStruct;
 }
 
@@ -411,9 +348,12 @@ int SYSTEM_Init() {
 	int retVal;
 
 	stdio_init_all();
-	gpio_init(GP16_PIN); //TBD: check for proper pin
+	gpio_init(GP16_PIN); //pin 21, counter input
     gpio_set_dir(GP16_PIN, GPIO_IN);
-	
+
+	gpio_init(GP28_PIN); //pin 34, LED
+    gpio_set_dir(GP28_PIN, GPIO_OUT);
+
 	gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
@@ -461,6 +401,7 @@ int main() {
 	long int	pulseCtr=0, oldPulseCtr=0;
 	struct funct_out retStruct;
 	struct bmp280_calib_param params;
+	absolute_time_t ledStop_t;
 
 	if ( (retVal= SYSTEM_Init()) != 0)
 		return retVal; //In case of error abort program
@@ -484,16 +425,21 @@ int main() {
 			execute = true;
 		}
 		
-		//enterProgramMode(true);
 		retStruct=sendData(execute, deltaCtr, (int16_t) temperature);
 		
 		gpio_put(LED_PIN, execute); //Debug
 
 		if (retStruct.Done) {
+			gpio_put(GP28_PIN, true);
+			ledStop_t = make_timeout_time_ms(3000); //3s timeout
 			execute=false;
 			oldPulseCtr += deltaCtr; //Avoid pulseCtr increment during sending
 		}
-		
+
+		//Keep LED on for 3s
+		if (absolute_time_diff_us(ledStop_t, g_systemTimers.g_now) > 0)
+			gpio_put(GP28_PIN, false);
+
 		if (retStruct.Error)
 			execute=false;
 	}
