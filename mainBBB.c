@@ -87,7 +87,7 @@ int SYSTEM_Init(char *device) {
 	return fd;
 }
 
-int ThingSpeakWrite(struct struct_dataFromField *inData) {
+int ThingSpeakWrite(struct struct_dataFromField *inData, char *inApiKey) {
 	int socketfd, portNumber, length, pulseCtr, temperature;
 	char readBuffer[2000], message[255], Host[]="api.thingspeak.com";
 	char data[32], head[512], number[8];
@@ -96,7 +96,7 @@ int ThingSpeakWrite(struct struct_dataFromField *inData) {
 	
 	pulseCtr = inData->energyPulses;
 	temperature = inData->temperature;
-	printf("[DEBUG] Writing to TS: %d-%d.\n", pulseCtr, temperature);
+	printf("[D] Writing to TS: %d-%d.\n", pulseCtr, temperature);
 	
 	sprintf(message, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", Host);
 	
@@ -135,7 +135,7 @@ int ThingSpeakWrite(struct struct_dataFromField *inData) {
 	strcat(data,"\n");
 	
 	strcpy(head, "POST /update HTTP/1.1\nHost: api.thingspeak.com\nConnection: close\nX-THINGSPEAKAPIKEY: ");
-	strcat(head, APIKEY);
+	strcat(head, inApiKey);
 	strcat(head, "\nContent-Type: application/x-www-form-urlencoded\nContent-Length:");
 	length = strlen(data);
 	sprintf(number, "%d", length);
@@ -311,7 +311,7 @@ while(run) {
 				dataToWeb.pressure = 10000; //Send an impossible value
 				}
 				
-			if ( (retVal=ThingSpeakWrite(&dataToWeb)) == 0) {
+			if ( (retVal=ThingSpeakWrite(&dataToWeb, APIKEY)) == 0) {
 				pulseCtr = 0; //Reset counter only when data is saved
 				temperatureSum = 0;
 				pressureSum = 0;
