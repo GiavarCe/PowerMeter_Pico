@@ -375,6 +375,7 @@ int SYSTEM_Init() {
 
     // configure BMP280
 	if ( (retVal = bmp280_init()) != 0) {
+		gpio_put(LED_PIN, true);
 		printf("bmp280_init error. Returned value: %d.\n", retVal);
 		return retVal;
 		}
