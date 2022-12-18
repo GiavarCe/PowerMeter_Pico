@@ -88,7 +88,7 @@ unsigned char calc_CRC(char *inData, int nrOfBytes) {
 	return CRC;
 }
 
-struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
+struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature, int inPressure) {
 	static bool execute_pr;
 	//b0 - Frame: stast delimiter 0x7E, b1-b2 Message length, b3 - Frame type
 	//b4 - Frame ID, b5 - b6 Dest.address, b7 - Options, b8-b9 pulse counter,
@@ -126,6 +126,8 @@ struct funct_out sendData(bool inExecute, int inDeltaCtr, int inTemperature) {
 			*(++firstDataPtr) = inDeltaCtr & 0xFF; //byte 9
 			*(++firstDataPtr) = inTemperature >> 8; //byte 10 - temperature MSB
 			*(++firstDataPtr) = inTemperature & 0xFF; //byte 11
+			*(++firstDataPtr) = inPressure >> 8; //byte 12 - pressure MSB
+			*(++firstDataPtr) = inPressure & 0xFF; //byte 13
 			msgLength = sizeof(sendMsg);
 			sendMsg[msgLength-1] = calc_CRC(&sendMsg[3], msgLength - 4); //Checksum
 			for (i=0; i < sizeof(sendMsg); i++)
@@ -368,8 +370,8 @@ int SYSTEM_Init() {
 
 // I2C is "open drain", pull ups to keep signal high when no data is being sent
     i2c_init(i2c_default, 100 * 1000);
-    gpio_set_function(PICO_DEFAULT_I2C_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(PICO_DEFAULT_I2C_SDA_PIN, GPIO_FUNC_I2C); //GP4, pin6
+    gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C); //GP5, pin7
     gpio_pull_up(PICO_DEFAULT_I2C_SDA_PIN);
     gpio_pull_up(PICO_DEFAULT_I2C_SCL_PIN);
 
@@ -426,7 +428,7 @@ int main() {
 			execute = true;
 		}
 		
-		retStruct=sendData(execute, deltaCtr, (int16_t) temperature);
+		retStruct=sendData(execute, deltaCtr, (int16_t) temperature, (int16_t) (pressure/100.f) );
 		
 		gpio_put(LED_PIN, execute); //Debug
 
