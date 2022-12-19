@@ -88,15 +88,16 @@ int SYSTEM_Init(char *device) {
 }
 
 int ThingSpeakWrite(struct struct_dataFromField *inData, char *inApiKey) {
-	int socketfd, portNumber, length, pulseCtr, temperature;
+	int socketfd, portNumber, length, pulseCtr, temperature, pressure;
 	char readBuffer[2000], message[255], Host[]="api.thingspeak.com";
-	char data[32], head[512], number[8];
+	char data[64], head[512], number[8];
 	struct sockaddr_in serverAddress;
 	struct hostent *server;
 	
 	pulseCtr = inData->energyPulses;
 	temperature = inData->temperature;
-	printf("[D] Writing to TS: %d-%d.\n", pulseCtr, temperature);
+	pressure = inData->pressure;
+	printf("[D] Writing to TS: %d-%d-%d.\n", pulseCtr, temperature, pressure);
 	
 	sprintf(message, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", Host);
 	
@@ -125,13 +126,16 @@ int ThingSpeakWrite(struct struct_dataFromField *inData, char *inApiKey) {
 		perror("Socket client: error connecting to the server.\n");
 		return -3;
 		}
-
+//Telegram preparation
 	strcpy(data,"field1=");
 	sprintf(number, "%d", pulseCtr);
-	strcat(data, number);
+	strcat(data, number); //Add pulse counter
 	strcat(data,"&field2=");
 	sprintf(number, "%.2f", temperature/100.f);
-	strcat(data, number);
+	strcat(data, number); //Add temperature
+	strcat(data,"&field3=");
+	sprintf(number, "%.2f", pressure/10.f);
+	strcat(data, number); //Add pressure
 	strcat(data,"\n");
 	
 	strcpy(head, "POST /update HTTP/1.1\nHost: api.thingspeak.com\nConnection: close\nX-THINGSPEAKAPIKEY: ");
