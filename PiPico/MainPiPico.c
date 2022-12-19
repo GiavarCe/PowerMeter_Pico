@@ -422,13 +422,13 @@ int main() {
 			bmp280_read_raw(&raw_temperature, &raw_pressure);
         	temperature = bmp280_convert_temp(raw_temperature, &params);
         	pressure = bmp280_convert_pressure(raw_pressure, raw_temperature, &params);
-        	printf("Pressure = %.3f kPa\tTemp. = %.2f C\n", pressure / 1000.f, temperature / 100.f); //Debug
+        	printf("Pressure = %.3f kPa\tTemp. = %.2f C\n", pressure / 100.f, temperature / 100.f); //Debug
 
 			deltaCtr = pulseCtr - oldPulseCtr;
 			execute = true;
 		}
 		
-		retStruct=sendData(execute, deltaCtr, (int16_t) temperature, (int16_t) (pressure/100.f) );
+		retStruct=sendData(execute, deltaCtr, (int16_t) temperature, (int16_t) (pressure/10.f) );
 		
 		gpio_put(LED_PIN, execute); //Debug
 
