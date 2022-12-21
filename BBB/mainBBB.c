@@ -22,6 +22,7 @@ UART2 uses P9_21 and P9_22
 #define	RECEIVING			20
 #define	ANALYZE_TELEGRAM	30
 #define WRITE_TO_WEB		200
+#define	DISCARD_TELEGRAM	400 //Wrong telegrams are discarded
 #define END_PROGRAM			900
 #define	ERROR				-999
 
@@ -181,7 +182,7 @@ int analyzeTelegram(char *inStringPtr, int inNrOfBytes, struct struct_dataFromFi
 		
 	msgLength = recvMsg[1] << 8 | recvMsg[2];
 	if (msgLength != RECV_MSG_LENGTH) { //Fixed length 
-		printf("Bad message length: %d\n", msgLength);
+		printf("Bad message length: received %d - expected %d\n", msgLength, RECV_MSG_LENGTH);
 		return -2;
 		}
 	
@@ -293,7 +294,7 @@ while(run) {
 			
 		case ANALYZE_TELEGRAM:
 			if ( (retVal = analyzeTelegram(recvString, charCtr, &dataFromField)) < 0)
-				status = ERROR;
+				status = DISCARD_TELEGRAM;
 			else { //Received telegram OK
 				pulseCtr += dataFromField.energyPulses;
 				temperatureSum += dataFromField.temperature;
@@ -321,6 +322,11 @@ while(run) {
 				pressureSum = 0;
 				samplesCtr = 0;
 				}
+			status = IDLE;
+			break;
+		
+		case DISCARD_TELEGRAM:
+			printf("Telegram discarded.\n");
 			status = IDLE;
 			break;
 		
