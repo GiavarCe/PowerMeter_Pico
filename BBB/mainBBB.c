@@ -1,5 +1,9 @@
 /* Running program on BBB
-UART2 uses P9_21 and P9_22
+UART4 uses P9_11 and P9_13
+Before start program:
+	- config-pin P9_11 uart
+	- config-pin P9_13 uart
+	- minicom -b 19200 -o -D /dev/ttyO2 (I don't know why...)
 */
 
 #include <stdio.h>
@@ -256,12 +260,12 @@ while(run) {
 				}
 				
 			if (os_500ms) {
-				//printf("[DEBUG] Leggo dalla seriale.\n");
-				if ( (count = read(uart, &c,1)) < 0) {//Read from uart
-					perror("Read error in IDLE.");
-					status = END_PROGRAM;
-					break;
-				}
+				if ( (count = read(uart, &c,1)) < 0) //Read from uart
+					if ( (errno != EAGAIN) & (errno != EWOULDBLOCK) ) {
+						perror("Read error in IDLE.");
+						status = END_PROGRAM;
+						break;
+					}
 				if (count == 1)  {
 					charCtr = 0;
 					recvString[charCtr++] = c;
@@ -313,7 +317,7 @@ while(run) {
 				}
 			else {
 				dataToWeb.temperature = 300; //Send an impossible value
-				dataToWeb.pressure = 10000; //Send an impossible value
+				dataToWeb.pressure = 1000; //Send an impossible value
 				}
 				
 			if ( (retVal=ThingSpeakWrite(&dataToWeb, APIKEY)) == 0) {
